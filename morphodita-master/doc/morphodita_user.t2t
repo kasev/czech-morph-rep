@@ -1,0 +1,804 @@
+MorphoDiTa User's Manual
+========================
+
+In a natural language text, the task of morphological analysis is to assign for
+each token (word) in a sentence its lemma (cannonical form) and
+a part-of-speech tag (POS tag). This is usually achieved in two steps:
+a morphological dictionary looks up all possible lemmas and POS tags for each
+word, and subsequently, a morphological tagger picks for each word the best
+lemma-POS tag candidate. The second task is called a disambiguation.
+
+MorphoDiTa also performs these two steps of morphological analysis: It first
+outputs all possible pairs of lemma and POS tag for each token. Consequently,
+the optimal combination of lemmas and POS tags is selected for the words in
+a sentence using an algorithm described in
+[Spoustová et al. 2009 http://aclweb.org/anthology//E/E09/E09-1087.pdf].
+
+Like any supervised machine learning tool, MorphoDiTa needs a trained linguistic model.
+This section describes the available language models and also the commandline
+tools and interfaces. The C++ library is described elsewhere, either in
+MorphoDiTa API Tutorial or in MorphoDiTa API Reference.
+
+
+%!include: morphodita_model_czech-morfflex-pdt.t2t
+
+
+%!include: morphodita_model_english-morphium-wsj.t2t
+
+
+== Running the Tagger ==[run_tagger]
+
+Probably the most common usage of MorphoDita is running a tagger to tag your data using
+``` run_tagger tagger_model
+
+The input is assumed to be in UTF-8 encoding and can be either already
+tokenized and segmented, or it can be a plain text which is tokenized and
+segmented automatically.
+
+Any number of files can be specified after the ``tagger_model``. If an argument
+``input_file:output_file`` is used, the given ``input_file`` is processed and
+the result is saved to ``output_file``. If only ``input_file`` is used, the
+result is saved to standard output. If no argument is given, input is read
+from standard input and written to standard output.
+
+The full command syntax of ``run_tagger`` is
+```
+run_tagger [options] tagger_file [file[:output_file]]...
+Options: --input=untokenized|vertical
+         --convert_tagset=pdt_to_conll2009|strip_lemma_comment|strip_lemma_id
+         --derivation=none|root|path|tree
+         --guesser=0|1 (should morphological guesser be used)
+         --output=vertical|xml
+```
+
+=== Input Formats ===[tagger_input_formats]
+
+The input format is specified using the ``--input`` option. Currently supported
+input formats are:
+- ``untokenized`` (default): the input is tokenized and segmented using
+  a tokenizer defined by the model,
+- ``vertical``: the input is in vertical format, every line is considered
+  a word, with empty line denoting end of sentence.
+
+
+=== Tag Set Conversion ===[tagger_tagset_conversion]
+
+Some tag sets can be converted to different ones. Currently supported tag set
+conversions are:
+- ``pdt_to_conll2009``: convert Czech PDT tag set to CoNLL 2009 tag set,
+- ``strip_lemma_comment``: strip lemma comment (see Lemma Structure in API Reference),
+- ``strip_lemma_id``: strip lemma id (see Lemma Structure in API Reference).
+
+
+=== Morphological Derivation ===[tagger_derivation]
+
+If the morphological model includes a morphological derivator, some morphological
+derivation operation may be performed on lemmas:
+- ``none`` (default): no morphological derivation is performed
+- ``root``: lemma is replaced by its root in the morphological derivation tree
+- ``path``: lemma is replaced by a space separated path to its root in the
+  morphological derivation tree (the original lemma is first, followed by its parent,
+  with the root being the last one)
+- ``tree``: whole morphological derivation tree is appended after the lemma,
+  encoded in the following way: root node is the first, then the subtrees of
+  the root children are encoded recursively (each after one space), followed by
+  a final space (which denotes that the children are complete)
+
+
+=== Morphological Guesser ===[tagger_morpho_guesser]
+
+By default, every tagger model uses the morphological guesser settings employed
+during the model training. However, the usage of morphological guesser can be
+overridden by the ``guesser`` parameter.
+
+
+=== Output Formats ===[tagger_output_formats]
+
+The output format is specified using the ``--output`` option. Currently
+supported output formats are:
+- ``xml`` (default): Simple XML format without a root element, using
+  ``<sentence>`` element to mark sentences and
+  ``<token lemma="..." tag="...">...</token>`` element to encode token
+  and its assigned lemma and tag.
+
+  Example output for input ``Děti pojedou k babičce. Už se těší.`` (line breaks added):
+```
+<sentence><token lemma='dítě' tag='NNFP1-----A----'>Děti</token>
+<token lemma='jet-1_^(pohybovat_se,_ne_však_chůzí)' tag='VB-P---3F-AA---'>pojedou</token>
+<token lemma='k-1' tag='RR--3----------'>k</token>
+<token lemma='babička' tag='NNFS3-----A----'>babičce</token>
+<token lemma='.' tag='Z:-------------'>.</token></sentence>
+<sentence><token lemma='už-1' tag='Db-------------'>Už</token>
+<token lemma='se_^(zvr._zájmeno/částice)' tag='P7-X4----------'>se</token>
+<token lemma='těšit_:T' tag='VB-S---3P-AA---'>těší</token>
+<token lemma='.' tag='Z:-------------'>.</token></sentence>
+```
+
+- ``vertical``: Every output line is a tag separated triple form-lemma-tag, with empty
+  line denoting end of sentence.
+
+  Example output for input ``Děti pojedou k babičce. Už se těší.``:
+```
+Děti	dítě	NNFP1-----A----
+pojedou	jet-1_^(pohybovat_se,_ne_však_chůzí)	VB-P---3F-AA---
+k	k-1	RR--3----------
+babičce	babička	NNFS3-----A----
+.	.	Z:-------------
+
+Už	už-1	Db-------------
+se	se_^(zvr._zájmeno/částice)	P7-X4----------
+těší	těšit_:T	VB-S---3P-AA---
+.	.	Z:-------------
+```
+
+
+== Running the Morphology ==[running_morphology]
+
+There are multiple commands performing morphological tasks.
+The [``run_morpho_analyze`` #run_morpho_analyze] executable performs morphological analysis and
+the [``run_morpho_generate`` #run_morpho_generate] executable performs morphological generation.
+The output of these commands is suitable for automatic processing.
+
+The [``run_morpho_cli`` #run_morpho_cli] executable performs both morphological analysis and generation,
+but is designed to be used interactively and produces more human-readable output.
+
+=== Morphological Analysis ===[run_morpho_analyze]
+
+The morphological analysis can be performed by running
+``` run_morpho_analyze morphology_model use_guesser
+
+The input is assumed to be in UTF-8 encoding and can be either already
+tokenized and segmented, or it can be a plain text which is tokenized and
+segmented automatically. The input files are specified same as with the
+[``run_tagger`` #run_tagger] command.
+
+Some morphological models contain both a manually created dictionary and
+a guesser. Therefore, a numeric ``use_guesser`` argument is required.
+If non-zero, the guesser is used, otherwise not.
+
+Because tagger models contain an embedded morphological model, a tagger model
+can be used instead of morphological one if ``--from_tagger`` option is
+specified.
+
+The full command syntax of ``run_morpho_analyze`` is
+```
+run_morpho_analyze [options] morphology_model use_guesser [file[:output_file]]...
+Options: --input=untokenized|vertical
+         --convert_tagset=pdt_to_conll2009|strip_lemma_comment|strip_lemma_id
+         --derivation=none|root|path|tree
+         --output=vertical|xml
+         --from_tagger
+```
+
+==== Input Formats ====[run_morpho_analyze_input_formats]
+
+The input format is specified using the ``--input`` option. Currently supported
+input formats are:
+- ``untokenized`` (default): the input is tokenized and segmented using
+  a tokenizer defined by the model,
+- ``vertical``: the input is in vertical format, every line is considered
+  a word, with empty line denoting end of sentence.
+
+
+Note that the input data is also segmented, even if it is not strictly
+necessary. Therefore, the input is processed by whole paragraphs (ending
+by an empty line).
+
+==== Tag Set Conversion ====[run_morpho_analyze_tagset_conversion]
+
+Some tag sets can be converted to different ones. Currently supported tag set
+conversions are:
+- ``pdt_to_conll2009``: convert Czech PDT tag set to CoNLL 2009 tag set,
+- ``strip_lemma_comment``: strip lemma comment (see Lemma Structure in API Reference),
+- ``strip_lemma_id``: strip lemma id (see Lemma Structure in API Reference).
+
+
+==== Morphological Derivation ====[run_morpho_analyze_derivation]
+
+If the morphological model includes a morphological derivator, some morphological
+derivation operation may be performed on lemmas:
+- ``none`` (default): no morphological derivation is performed
+- ``root``: lemma is replaced by its root in the morphological derivation tree
+- ``path``: lemma is replaced by a space separated path to its root in the
+  morphological derivation tree (the original lemma is first, followed by its parent,
+  with the root being the last one)
+- ``tree``: whole morphological derivation tree is appended after the lemma,
+  encoded in the following way: root node is the first, then the subtrees of
+  the root children are encoded recursively (each after one space), followed by
+  a final space (which denotes that the children are complete)
+
+
+==== Output Formats ====[run_morpho_analyze_output_formats]
+
+The output format is specified using the ``--output`` option. Currently
+supported output formats are:
+- ``xml`` (default): Simple XML format without a root element, using
+  using ``<token><analysis lemma="..." tag="..."/><analysis...>...</token>``
+  element to encode morphological analysis.
+
+  Example output for input ``Děti pojedou k babičce. Už se těší.`` (line breaks added):
+```
+<sentence><token><analysis lemma="dítě" tag="NNFP1-----A----"/><analysis lemma="dítě" tag="NNFP4-----A----"/><analysis lemma="dítě" tag="NNFP5-----A----"/>Děti</token>
+<token><analysis lemma="jet-1_^(pohybovat_se,_ne_však_chůzí)" tag="VB-P---3F-AA---"/>pojedou</token>
+<token><analysis lemma="k-1" tag="RR--3----------"/><analysis lemma="k-3_^(označení_pomocí_písmene)" tag="NNNXX-----A----"/><analysis lemma="k-4`kůň_:B_^(jednotka_výkonu)" tag="NNMXX-----A---8"/><analysis lemma="k-8_:B_^(ost._zkratka)" tag="XX------------8"/><analysis lemma="komanditní_:B_^(jen_komanditní_společnost)" tag="AAXXX----1A---8"/><analysis lemma="koncernový_:B" tag="AAXXX----1A---8"/><analysis lemma="kuo-1_:B_,t_^(stará_jednotka_výkonu)" tag="NNNXX-----A---8"/>k</token>
+<token><analysis lemma="babička" tag="NNFS3-----A----"/><analysis lemma="babička" tag="NNFS6-----A----"/>babičce</token>
+<token><analysis lemma="." tag="Z:-------------"/>.</token></sentence>
+<sentence><token><analysis lemma="už-1" tag="Db-------------"/><analysis lemma="už-2" tag="TT-------------"/>Už</token>
+<token><analysis lemma="se_^(zvr._zájmeno/částice)" tag="P7-X4----------"/><analysis lemma="s-1" tag="RV--2----------"/><analysis lemma="s-1" tag="RV--7----------"/>se</token>
+<token><analysis lemma="těšit_:T" tag="VB-P---3P-AA---"/><analysis lemma="těšit_:T" tag="VB-S---3P-AA---"/>těší</token>
+<token><analysis lemma="." tag="Z:-------------"/>.</token></sentence>
+```
+
+- ``vertical``: Every output line contains a word and a tab separated lemma-tag
+  pairs assigned to the input word, with empty line denoting end of sentence.
+
+  Example output for input ``Děti pojedou k babičce. Už se těší.``:
+```
+Děti	dítě	NNFP1-----A----	dítě	NNFP4-----A----	dítě	NNFP5-----A----
+pojedou	jet-1_^(pohybovat_se,_ne_však_chůzí)	VB-P---3F-AA---
+k	k-1	RR--3----------	k-3_^(označení_pomocí_písmene)	NNNXX-----A----	k-4`kůň_:B_^(jednotka_výkonu)	NNMXX-----A---8	k-8_:B_^(ost._zkratka)	XX------------8	komanditní_:B_^(jen_komanditní_společnost)	AAXXX----1A---8	koncernový_:B	AAXXX----1A---8	kuo-1_:B_,t_^(stará_jednotka_výkonu)	NNNXX-----A---8
+babičce	babička	NNFS3-----A----	babička	NNFS6-----A----
+.	.	Z:-------------
+
+Už	už-1	Db-------------	už-2	TT-------------
+se	se_^(zvr._zájmeno/částice)	P7-X4----------	s-1	RV--2----------	s-1	RV--7----------
+těší	těšit_:T	VB-P---3P-AA---	těšit_:T	VB-S---3P-AA---
+.	.	Z:-------------
+```
+
+
+=== Morphological Generation ===[run_morpho_generate]
+
+The morphological generation can be performed by running
+``` run_morpho_generate morphology_model use_guesser
+
+The input is assumed to be in UTF-8 encoding. The input files are specified
+same as with the [``run_tagger`` #run_tagger] command.
+
+Input for morphological generation has to be in vertical format, each line
+containing a lemma, which can be optionally followed by a tab and a
+[tag wildcard #run_morpho_generate_tag_wildcard]. The output has the same number of lines as input,
+line //l// contains tab separated form-lemma-tag triplets which can be generated
+from the lemma on he input line //l//. If a tag wildcard was provided, only
+triplets with matching tags are returned.
+
+Some morphological models contain both a manually created dictionary and
+a guesser. Therefore, a numeric ``use_guesser`` argument is required.
+If non-zero, the guesser is used, otherwise not.
+
+Because tagger models contain an embedded morphological model, a tagger model
+can be used instead of morphological one if ``--from_tagger`` option is
+specified.
+
+The full command syntax of ``run_morpho_generate`` is
+```
+run_morpho_generate [options] morphology_model use_guesser [input_file[:output_file]]...
+Options: --convert_tagset=pdt_to_conll2009|strip_lemma_comment|strip_lemma_id
+         --from_tagger
+```
+
+Example input data:
+```
+dítě
+jet	?[fN]??[-1]
+k-1
+babička	NNFS3-----A----
+```
+
+Example output:
+```
+dítě	dítě	NNNS1-----A----	dítě	dítě	NNNS4-----A----	dítě	dítě	NNNS5-----A----	dítěte	dítě	NNNS2-----A----	dítěti	dítě	NNNS3-----A----	dítěti	dítě	NNNS6-----A----	dítětem	dítě	NNNS7-----A----	děti	dítě	NNFP1-----A----	děti	dítě	NNFP4-----A----	děti	dítě	NNFP5-----A----	dětma	dítě	NNFP7-----A---6	dětmi	dítě	NNFP7-----A----	dětem	dítě	NNFP3-----A----	dětí	dítě	NNFP2-----A----	dětech	dítě	NNFP6-----A----	dětima	dítě_,h	NNFP7-----A---6
+ject	jet	Vf--------A---6	jet	jet-1_^(pohybovat_se,_ne_však_chůzí)	Vf--------A----	jeti	jet-1_^(pohybovat_se,_ne_však_chůzí)	Vf--------A---2	nejet	jet-1_^(pohybovat_se,_ne_však_chůzí)	Vf--------N----	nejeti	jet-1_^(pohybovat_se,_ne_však_chůzí)	Vf--------N---2	jet	jet-2_,h_^(letadlo_s_tryskovým_pohonem)NNIS1-----A----	jety	jet-2_,h_^(letadlo_s_tryskovým_pohonem)	NNIP1-----A----
+k	k-1	RR--3----------	ke	k-1	RV--3----------	ku	k-1	RV--3---------1
+babičce babička NNFS3-----A----
+```
+
+==== Tag Set Conversion ====[run_morpho_generate_tagset_conversion]
+
+Some tag sets can be converted to different ones. Currently supported tag set
+conversions are:
+- ``pdt_to_conll2009``: convert Czech PDT tag set to CoNLL 2009 tag set,
+- ``strip_lemma_comment``: strip lemma comment (see Lemma Structure in API Reference),
+- ``strip_lemma_id``: strip lemma id (see Lemma Structure in API Reference).
+
+
+Note that the tag set conversion is applied only to the output, not to the
+input lemmas and wildcards.
+
+
+==== Tag Wildcards ====[run_morpho_generate_tag_wildcard]
+
+When only forms with a specific tag should be generated for a given lemma, tag
+wildcard can be specified. The tag wildcard is a simple wildcard allowing to filter
+the results of morphological generation.
+
+Most characters of a tag wildcard match corresponding characters of a tag, with the following exceptions:
+ - ``?`` matches any character of a tag.
+ - ``[chars]`` matches any of the characters listed. The dash ``-`` has no special meaning and if ``]``
+   is the first character in ``chars``, it is considered as one of the characters and does not end the group.
+ - ``[^chars]`` matches any of the characters //not// listed.
+
+
+=== Interactive Morphological Analysis and Generation ===[run_morpho_cli]
+
+
+Morphological analysis and generation which is interactive and more human readable
+can be run using:
+``` run_morpho_cli morphology_model
+
+The input is read from standard input, command on each line. If there is no tab
+on a line, analysis is performed on the given word. If there is a tab on
+a line, generation is performed on the first word, using the second word as
+a [tag wildcard #run_morpho_generate_tag_wildcard].  If the second word is empty (i.e., the input
+is for example ``on	``), all forms are generated.
+
+Because tagger models contain an embedded morphological model, a tagger model
+can be used instead of morphological one if ``--from_tagger`` option is
+specified.
+
+The full command syntax of ``run_morpho_cli`` is
+```
+run_morpho_cli [options] morphology_model
+Options: --from_tagger
+```
+
+== Running the Tokenizer ==[run_tokenizer]
+
+Using the ``run_tokenizer`` executable it is possible to perform only
+tokenization and segmentation.
+
+The input is a UTF-8 encoded plain text and the input files are specified same
+as with the [``run_tagger`` #run_tagger] command.
+
+The tokenizer can be specified either by using a morphology model
+(``--morphology`` option), tagger model (``--tagger`` option) or by using
+a tokenizer identifier (``--tokenizer`` option). Currently supported
+tokenizer identifiers are:
+- ``czech``
+- ``english``
+- ``generic``
+
+
+The full command syntax of ``run_tokenizer`` is
+```
+run_tokenizer [options] [file[:output_file]]...
+Options: --tokenizer=czech|english|generic
+         --morphology=morphology_model_file
+         --tagger=tagger_model_file
+         --output=vertical|xml
+```
+
+=== Output Formats ===[run_tokenizer_output_formats]
+
+The output format is specified using the ``--output`` option. Currently
+supported output formats are:
+- ``xml`` (default): Simple XML format without a root element, using
+  ``<sentence>`` element to mark sentences and ``<token>`` element to mark
+  tokens.
+
+  Example output for input ``Děti pojedou k babičce. Už se těší.`` (line breaks added):
+```
+<sentence><token>Děti</token> <token>pojedou</token> <token>k</token>
+<token>babičce</token><token>.</token></sentence> <sentence><token>Už</token>
+<token>se</token> <token>těší</token><token>.</token></sentence>
+```
+
+- ``vertical``: Each token is on a separate line, every sentence is ended by
+  a blank line.
+
+  Example output for input ``Děti pojedou k babičce. Už se těší.``:
+```
+Děti
+pojedou
+k
+babičce
+.
+
+Už
+se
+těší
+.
+
+```
+
+
+== Running REST Server ==[rest_server]
+
+MorphoDiTa also provides REST server binary ``morphodita_server``.
+The binary uses [MicroRestD http://github.com/ufal/microrestd] as a REST
+server implementation and provides
+[MorphoDiTa REST API http://lindat.mff.cuni.cz/services/morphodita/api-reference.php].
+
+The full command syntax of ``morphodita_server`` is
+```
+morphodita_server [options] port (model_name weblicht_id model_file acknowledgements)*
+Options: --daemon
+```
+
+The ``morphodita_server`` can run either in foreground or in background (when
+``--daemon`` is used). The specified model files are loaded during start and
+kept in memory all the time. This behaviour might change in future to load the
+models on demand.
+
+
+== Custom Morphological and Tagging Models ==[custom_models]
+
+It is possible to create custom morphological and tagging models.
+
+=== Custom Morphological Models ===[custom_morphological_models]
+
+Custom morphological models can be created using ``encode_dictionary`` binary.
+
+The ``encode_dictionary`` reads from standard input and prints MorphoDiTa
+morphological model on standard output.  The input of ``encode_dictionary`` is
+a textual representation of morphological dictionary. It should be UTF-8
+encoded and every line should be a tab separated triplet
+``lemma \t tag \t form``. All forms of one lemma must appear in a continuous region and no line
+should appear more than once (``sort -u`` can be used to achieve this).
+
+Run ``encode_dictionary`` with the following options:
+``` encode_dictionary generic max_suffix_len unknown_tag number_tag punctuation_tag symbol_tag [statistical_guesser]
+- ``generic``: This parameter defines tokenizer and other language specific
+  behaviour. Other values than ``generic`` take different options and are not
+  documented.
+
+- ``max_suffix_len``: Maximum length of suffixes in automatically inferred
+  inflexion classes.  If unsure, use 8 (we use 8 for Czech and 4 for English).
+  Smaller values produce larger and slightly faster models.
+
+- ``unknown_tag``: Assigned to a form during analysis if no matching tag can be
+  found.
+
+- ``number_tag``: Assigned to a form during analysis if the form was not found
+  in the dictionary and it looks like a number. Can be the same as
+  ``unknown_tag``.
+
+- ``punctuation_tag``: Assigned to a form during analysis if the form was not found
+  in the dictionary and it consists of Unicode characters in the Punctuation
+  category. Can be the same as ``unknown_tag``.
+
+- ``symbol_tag``: Assigned to a form during analysis if the form was not found
+  in the dictionary and it consists of Unicode characters in the Symbol
+  category. Can be the same as ``unknown_tag``.
+
+- ``statistical_guesser``: Optional file containing statistical guesser generated
+  using the ``train_guesser`` binary (see below).
+
+
+Example input data:
+```
+dog	NN	dog
+dog	NNS	dogs
+go	VB	go
+go	VBP	go
+go	VBZ	goes
+go	VBG	going
+go	VBD	went
+```
+
+Example command line:
+``` encode_dictionary generic 8 UNK NUM PUNC SYM <input_data >output_model
+
+
+==== Training Statistical Guesser ====[training_statistical_guesser]
+
+Optionally, statistical guesser might be trained on disambiguated
+data using the ``train_guesser`` binary.
+
+The input data is in the same format as the training data for the tagger,
+i.e., every word on a line (each line containing tab separated triplet
+``form \t lemma \t tag`` in UTF-8 encoding), with end of sentence denoted
+by an empty line. Note that the input data must not contain spaces.
+
+The full command syntax of ``train_guesser`` is:
+```
+train_guesser [options] suffix_len rules_per_suffix <input_data >output_guesser
+Options: --max_prefixes=maximum number of prefixes to create
+         --min_prefix_count=minimum count to create a prefix
+```
+- ``suffix_len``: Generate guesser rules using suffixes of length at most
+  ``suffix_len``(for Czech we use 3).
+- ``rules_per_suffix``: Maximum number of guesser rules generated per suffix
+  (for Czech we use 8 for a rich tag set (more than a thousand tags) and 6 for
+  a coarse tag set (67 tags)).
+- ``max_prefixes``: The guesser rules might also be specific for several prefixes.
+  There might be at most ``max_prefixes`` such prefixes. Note that the more
+  prefixes are allowed, the large the guesser is (for Czech we set this to 0,
+  but for some other languages we also use 4).
+- ``min_prefix_count``: In order for a prefix to be considered, it has to occur
+  at most the specified number of times in the data.
+-
+
+
+==== Using External Morphology ====[using_external_morphology]
+
+Sometimes it is useful to train MorphoDiTa tagger using external morphological
+analysis, without having a MorphoDiTa morphological dictionary.
+
+That is possible using a so called //external morphology model//. External
+morphology model can be created easily using
+``` encode_dictionary external unknown_tag >output_model
+No standard input is read in this case. The ``unknown_tag`` parameter is used when
+no tag is assigned to a word form during analysis. The resulting model is
+printed on standard output.
+
+The external morphology model does not contain any morphological dictionary.
+Instead, it expects the user to perform morphological analysis and generation on
+their own. Therefore, the input form to analysis is expected to be followed by
+space separated lemma-tag pairs, which are returned by the analysis.
+Similarly, the input lemma to generation is expected to be followed by space
+separated form-tag pairs, which are again returned by the generation (possibly
+filtered by a tag wildcard). (To extract the length of the form or lemma itself
+even when followed by external analyses, API calls ``raw_form_len`` or
+``raw_lemma_len`` and ``lemma_id_len`` can be used.)
+
+Note that the tokenizer returned by the external morphology model is the same
+as the tokenizer of the generic model, and splits input on spaces. Therefore,
+it can be used to tokenize input, the tokens then passed to the external
+morphology, and the results can be after proper formatting used as input to
+MorphoDiTa in vertical input format.
+
+Example input form for analysis using external morphology model:
+``` wishes wish NNS wish VBZ
+
+Example input lemma for generation using external morphology model:
+``` go go VB go VBP goes VBZ going VBG went VBG
+
+
+=== Custom Tagging Models ===[custom_tagging_models]
+
+Custom tagging models can be trained using ``train_tagger`` binary, which has
+the following options:
+``` train_tagger generic_234 morphology use_guesser features iterations prune_features [heldout_data [early_stopping]] <input_data >tagger_model
+- ``generic_234``: This parameter defines the tagger (elementary features and
+  algorithm) and the order of Viterbi decoding. Use either ``generic2``,
+  ``generic3`` or ``generic4``. If unsure, use ``generic3`` (best released
+  Czech and English models use ``generic3``). The ``generic2`` produces faster,
+  but less accurate models, ``generic4`` produces larger and only marginally
+  better models.
+
+- ``morphology``: File with the morphological dictionary to use.
+
+- ``use_guesser``: Use ``0``/``1`` to specify whether morphological guesser
+  should be used. Unless you have a good reason not to, use ``1``.
+
+- ``features``: File with feature sequences for the tagger. The file format and available
+  elementary features are [described in following section #tagger_feature_file_format].
+
+- ``iterations``: Number of training iterations. For English, values 5-10 are used,
+  for Czech, values 10-15 are used. Can be affected by ``early_stopping``.
+
+- ``prune_features``: Use ``0``/``1`` to disable/enable pruning of feature
+  sequences not found in training data. Use ``1`` for smaller and marginally
+  less accurate models, and ``0`` for larger and marginally better models.
+  If unsure, use ``1`` (best released Czech and English models use ``1``).
+
+- ``heldout_data``: Optional file with heldout data in the same format as input
+  data.  If supplied, accuracy is measured on the heldout data after every
+  training iteration.
+
+- ``early_stopping``: Optionally use ``0``/``1`` to disable/enable early
+  stopping. If early stopping is enabled, the resulting model is not the one
+  after the last training iteration, but the one with best heldout data
+  accuracy.
+
+
+Example command line (use morphology from ``morpho.dict``, features from ``features.ft`` and no heldout data):
+``` train_tagger generic3 morpho.dict 1 features.ft 10 1 <input.data >tagger.model
+
+Example command line (use morphology from ``morpho.dict``, features from ``features.ft`` and use heldout data with early stopping):
+``` train_tagger generic3 morpho.dict 1 features.ft 15 1 heldout.data 1 <input.data >tagger.model
+
+See next sections for examples of input data and feature files.
+
+
+==== Input Data Format ====[tagger_input_format]
+
+The input data (and the heldout data) represent a sequence of sentences.
+Different sentences do not interact in any way. Words of one sentence are
+stored on consecutive lines, each line containing tab separated triplet
+``form \t lemma \t tag`` in UTF-8 encoding. End of sentence is denoted
+by an empty line.
+
+Example:
+```
+Děti	dítě	NNFP1-----A----
+pojedou	jet-1_^(pohybovat_se,_ne_však_chůzí)	VB-P---3F-AA---
+k	k-1	RR--3----------
+babičce	babička	NNFS3-----A----
+.	.	Z:-------------
+
+Už	už-1	Db-------------
+se	se_^(zvr._zájmeno/částice)	P7-X4----------
+těší	těšit_:T	VB-S---3P-AA---
+.	.	Z:-------------
+```
+
+==== Feature File Format ====[tagger_feature_file_format]
+
+The features used in the tagger have major influence on tagging performance.
+The feature file contains several //feature sequences//, each sequence
+consisting of several //elementary features//. The elementary features are
+computed by MorphoDiTa and different tagger models can have a different set of
+elementary features. Here we describe elementary features of ``generic``
+tagger:
+- ``Form``: word form
+- ``Prefix1`` .. ``Prefix9``: word form prefix of length 1..9 (measured in Unicode characters)
+- ``Suffix1`` .. ``Suffix9``: word form suffix of length 1..9 (measured in Unicode characters)
+- ``Num``: whether the word form contains at least one numbers (Unicode category Number)
+- ``Cap``: whether the word form contains at least one uppercase or titlecase letter
+- ``Dash``: whether the word form contains at least one dash (Unicode category 'Punctuation, Dash')
+- ``Tag``: word form PoS tag
+- ``Tag1`` .. ``Tag5``: letter 1..5 of word form PoS tag
+- ``Lemma``: word form lemma
+- ``FollowingVerbTag``: PoS tag of a nearest following verb, i.e., a nearest
+  following word form with at least one of the PoS tags starting with ``V``
+- ``FollowingVerbLemma``: lemma of a nearest following verb, i.e., a nearest
+  following word form with at least one of the PoS tags starting with ``V``
+- ``PreviousVerbTag``: PoS tag of a nearest previous verb, i.e., a nearest
+  previous word whose PoS tag (assigned by the tagger) starts with ``V``
+- ``PreviousVerbTag``: lemma of a nearest previous verb, i.e., a nearest
+  previous word whose PoS tag (assigned by the tagger) starts with ``V``
+
+
+The feature file defines //feature sequences// which can be applied to a word
+form. A feature sequence consists of elementary features assigned to the given
+form or its neighbours.
+
+Every line in the feature file defines one feature sequence. A feature sequence
+consists of comma joined space separated pairs of elementary feature and an
+offset to which does the elementary feature apply (i.e., ``Form 0`` or
+``Tag 0,Lemma -1``). The file format is strict and does not allow any
+additional spaces or commas.
+
+Note that offset of some of the elementary features is affected by the order or
+Viterbi decoding used. Notably, if Viterbi decoding of order //N// is utilized,
+``Tag`` and ``Lemma`` can be used inside the decoded window, i.e., only with
+offsets //-N+1// .. //0//.
+
+For inspiration, we present feature files used for releases Czech
+and English MorphoDiTa models. Both these feature files are slight
+modifications of feature files described in the paper
+Spoustová et al. 2009: Drahomíra "johanka" Spoustová, Jan Hajič, Jan Raab, Miroslav Spousta. 2009. //[Semi-Supervised Training for the Averaged Perceptron POS Tagger. http://aclweb.org/anthology//E/E09/E09-1087.pdf]// In Proceedings of the 12th Conference of the European Chapter of the ACL (EACL 2009), pages 763-771, Athens, Greece, March. Association for Computational Linguistics.
+
+Feature file for English:
+```
+Tag 0,Form 0
+Tag 0,Prefix1 0
+Tag 0,Prefix2 0
+Tag 0,Prefix3 0
+Tag 0,Prefix4 0
+Tag 0,Prefix5 0
+Tag 0,Prefix6 0
+Tag 0,Prefix7 0
+Tag 0,Prefix8 0
+Tag 0,Prefix9 0
+Tag 0,Suffix1 0
+Tag 0,Suffix2 0
+Tag 0,Suffix3 0
+Tag 0,Suffix4 0
+Tag 0,Suffix5 0
+Tag 0,Suffix6 0
+Tag 0,Suffix7 0
+Tag 0,Suffix8 0
+Tag 0,Suffix9 0
+Tag 0,Num 0
+Tag 0,Cap 0
+Tag 0,Dash 0
+Tag 0,Tag -1
+Tag 0,Tag -1,Tag -2
+Tag 0,Form -1
+Tag 0,Form -2
+Tag 0,Form -1,Form -2
+Tag 0,Form 1
+Tag 0,Form 1,Form 2
+Tag 0,Tag1 -1
+Tag 0,Lemma -1
+Lemma 0,Tag -1
+```
+
+Feature file for Czech (note that some feature sequences predict only part of
+PoS tags trying to overcome data sparseness; ``Tag2`` is extended PoS, ``Tag3``
+is gender, ``Tag5`` is case):
+```
+Tag 0
+Tag 0,Tag -1
+Tag 0,Tag -1,Tag -2
+Tag 0,Tag -2
+Tag 0,Form 0
+Tag 0,Form 0,Form -1
+Tag 0,Form -1
+Tag 0,Form -2
+Tag 0,PreviousVerbTag 0
+Tag 0,PreviousVerbLemma 0
+Tag 0,FollowingVerbTag 0
+Tag 0,FollowingVerbLemma 0
+Tag 0,Lemma -1
+Lemma 0,Tag -1
+Tag 0,Form 1
+Tag2 0,Tag5 0
+Tag2 0,Tag5 0,Tag2 -1,Tag5 -1
+Tag2 0,Tag5 0,Tag2 -1,Tag5 -1,Tag2 -2,Tag5 -2
+Tag5 0
+Tag5 0,Tag -1
+Tag5 0,Tag -1,Tag -2
+Tag5 0,Tag -2
+Tag5 0,Form 0
+Tag5 0,Form 0,Form -1
+Tag5 0,Form -1
+Tag5 0,Form -2
+Tag5 0,PreviousVerbTag 0
+Tag5 0,PreviousVerbLemma 0
+Tag5 0,FollowingVerbTag 0
+Tag5 0,FollowingVerbLemma 0
+Tag5 0,Lemma -1
+Tag5 0,Form 1
+Tag3 0
+Tag3 0,Tag -1
+Tag3 0,Tag -1,Tag -2
+Tag3 0,Tag -2
+Tag3 0,Form 0
+Tag3 0,Form 0,Form -1
+Tag3 0,Form -1
+Tag3 0,Form -2
+Tag3 0,PreviousVerbTag 0
+Tag3 0,PreviousVerbLemma 0
+Tag3 0,FollowingVerbTag 0
+Tag3 0,FollowingVerbLemma 0
+Tag3 0,Lemma -1
+Tag3 0,Form 1
+Tag 0,Prefix1 0
+Tag 0,Prefix2 0
+Tag 0,Prefix3 0
+Tag 0,Prefix4 0
+Tag 0,Suffix1 0
+Tag 0,Suffix2 0
+Tag 0,Suffix3 0
+Tag 0,Suffix4 0
+Tag 0,Num 0
+Tag 0,Cap 0
+Tag 0,Dash 0
+Tag5 0,Suffix1 0
+Tag5 0,Suffix2 0
+Tag5 0,Suffix3 0
+Tag5 0,Suffix4 0
+```
+
+Feature file for Czech, Part of Speech only variant:
+```
+Tag 0
+Tag 0,Tag -1
+Tag 0,Tag -1,Tag -2
+Tag 0,Tag -2
+Tag 0,Form 0
+Tag 0,Form 0,Form -1
+Tag 0,Form -1
+Tag 0,Form -2
+Tag 0,PreviousVerbTag 0
+Tag 0,PreviousVerbLemma 0
+Tag 0,FollowingVerbTag 0
+Tag 0,FollowingVerbLemma 0
+Tag 0,Lemma -1
+Lemma 0,Tag -1
+Tag 0,Form 1
+Tag 0,Prefix1 0
+Tag 0,Prefix2 0
+Tag 0,Prefix3 0
+Tag 0,Prefix4 0
+Tag 0,Suffix1 0
+Tag 0,Suffix2 0
+Tag 0,Suffix3 0
+Tag 0,Suffix4 0
+Tag 0,Num 0
+Tag 0,Cap 0
+Tag 0,Dash 0
+```
+
+==== Measuring Tagger Accuracy ====[tagger_accuracy]
+
+Measuring custom tagger accuracy can be performed by running:
+``` tagger_accuracy tagger_model <test_data
+
+This binary reads input in the [same format as ``train_tagger`` #tagger_input_format],
+i.e., tab separated form-lemma-tag triplets, and evaluates the accuracy
+of the tagger model on the given testing data.

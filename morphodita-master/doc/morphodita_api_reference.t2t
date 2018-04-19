@@ -1,0 +1,640 @@
+MorphoDiTa API Reference
+========================
+
+The MorphoDiTa API is defined in header ``morphodita.h`` and resides in
+``ufal::morphodita`` namespace.
+
+The strings used in the MorphoDiTa API are always UTF-8 encoded (except from
+file paths, whose encoding is system dependent).
+
+
+== MorphoDiTa Versioning ==[versioning]
+
+MorphoDiTa is versioned using [Semantic Versioning http://semver.org/].
+Therefore, a version consists of three numbers //major.minor.patch//, optionally
+followed by a hyphen and pre-release version info, with the following semantics:
+
+- Stable versions have no pre-release version info, development have non-empty
+  pre-release version info.
+- Two versions with the same //major.minor// have the same API with the same
+  behaviour, apart from bugs. Therefore, if only //patch// is increased, the
+  new version is only a bug-fix release.
+- If two versions //v// and //u// have the same //major//, but //minor(v)// is
+  greater than //minor(u)//, version //v// contains only additions to the API.
+  In other words, the API of //u// is all present in //v// with the same
+  behaviour (once again apart from bugs). It is therefore safe to upgrade to
+  a newer MorphoDiTa version with the same //major//.
+- If two versions differ in //major//, their API may differ in any way.
+
+
+Models created by MorphoDiTa have the same behaviour in all MorphoDiTa
+versions with same //major//, apart from obvious bugfixes. On the other hand,
+models created from the same data by different //major.minor// MorphoDiTa
+versions may have different behaviour.
+
+== Lemma Structure ==[lemma_structure]
+
+The lemmas used by MorphoDiTa consist of three parts:
+
++ //raw lemma//: text form of the lemma. May not uniquely distinguish
+  lemma meanings, lemma use cases etc.
++ //lemma id//: together with raw lemma provide a unique identifier of the lemma,
+  possibly including lemma meanings or use cases.
++ //lemma comments//: additional comments for the given lemma.
+
+
+These parts are stored in one string and the boundaries between them can be
+determined by
+[``morpho::raw_lemma_len`` #morpho_raw_lemma_len] and
+[``morpho::lemma_id_len`` #morpho_lemma_id_len] methods.
+Analyzer and tagger always return lemma in this structured form. When
+performing morphological generation, either //raw lemma// or both //raw lemma// and
+//lemma id// can be specified, any //lemma comments// are ignored.
+
+
+== Struct string_piece ==[string_piece]
+```
+struct string_piece {
+  const char* str;
+  size_t len;
+
+  string_piece();
+  string_piece(const char* str);
+  string_piece(const char* str, size_t len);
+  string_piece(const std::string& str);
+}
+```
+
+The [``string_piece`` #string_piece] is used for efficient string passing. The string
+referenced in [``string_piece`` #string_piece] is not owned by it, so users have to make sure
+the referenced string exists as long as the [``string_piece`` #string_piece].
+
+== Struct tagged_form ==[tagged_form]
+```
+struct tagged_form {
+  std::string form;
+  std::string tag;
+};
+```
+
+The [``tagged_form`` #tagged_form] is a pair of strings used when obtaining a form and tag
+pair.
+
+== Struct tagged_lemma ==[tagged_lemma]
+```
+struct tagged_lemma {
+  std::string lemma;
+  std::string tag;
+};
+```
+
+The [``tagged_lemma`` #tagged_lemma] is a pair of strings used when obtaining a lemma and tag
+pair.
+
+== Struct tagged_lemma_forms ==[tagged_lemma_forms]
+```
+struct tagged_lemma_forms {
+  std::string lemma;
+  std::vector<[tagged_form #tagged_form]> forms;
+};
+```
+
+The [``tagged_lemma_forms`` #tagged_lemma_forms] represents a lemma and a list of tagged forms.
+
+== Struct token_range ==[token_range]
+```
+struct token_range {
+  size_t start;
+  size_t length;
+};
+```
+
+The [``token_range`` #token_range] represent a range of a token as returned by a [tokenizer #tokenizer].
+The ``start`` and ``length`` fields specify the token position in Unicode
+characters, not in bytes of UTF-8 encoding.
+
+== Struct derivated_lemma ==[derivated_lemma]
+```
+struct derivated_lemma {
+  std::string lemma;
+};
+```
+
+The [``derivated_lemma`` #derivated_lemma] structure stores information about a derivation.
+This information currently consists of lemma only, but a type of the derivation may
+be added later.
+
+== Class version ==[version]
+```
+class version {
+ public:
+  unsigned major;
+  unsigned minor;
+  unsigned patch;
+  std::string prerelease;
+
+  static [version #version] [current #version_current]();
+};
+```
+
+The [``version`` #version] class represents MorphoDiTa version.
+See [MorphoDiTa Versioning #versioning] for more information.
+
+=== version::current ===[version_current]
+``` static [version #version] current();
+
+Returns current MorphoDiTa version.
+
+
+== Class tokenizer ==[tokenizer]
+```
+class tokenizer {
+ public:
+  virtual ~tokenizer() {}
+
+  virtual void [set_text #tokenizer_set_text]([string_piece #string_piece] text, bool make_copy = false) = 0;
+  virtual bool [next_sentence #tokenizer_next_sentence](std::vector<[string_piece #string_piece]>* forms, std::vector<[token_range #token_range]>* tokens) = 0;
+
+  static [tokenizer #tokenizer]* [new_vertical_tokenizer #tokenizer_new_vertical_tokenizer]();
+  static [tokenizer #tokenizer]* [new_czech_tokenizer #tokenizer_new_czech_tokenizer]();
+  static [tokenizer #tokenizer]* [new_english_tokenizer #tokenizer_new_english_tokenizer]();
+  static [tokenizer #tokenizer]* [new_generic_tokenizer #tokenizer_new_generic_tokenizer]();
+};
+```
+
+The [``tokenizer`` #tokenizer] class performs segmentation and tokenization of given text.
+The class is //not// threadsafe.
+
+The [``tokenizer`` #tokenizer] instances can be obtained either directly using
+static methods or through instances of [``morpho`` #morpho] and [``tagger`` #tagger].
+
+=== tokenizer::set_text ===[tokenizer_set_text]
+``` virtual void set_text([string_piece #string_piece] text, bool make_copy = false) = 0;
+
+Set the text which is to be tokenized.
+
+If ``make_copy`` is ``false``, only a reference to the given text is
+stored and the user has to make sure it exists until the tokenizer
+is released or ``set_text`` is called again. If ``make_copy``
+is ``true``, a copy of the given text is made and retained until the
+tokenizer is released or ``set_text`` is called again.
+
+=== tokenizer::next_sentence ===[tokenizer_next_sentence]
+``` virtual bool next_sentence(std::vector<[string_piece #string_piece]>* forms, std::vector<[token_range #token_range]>* tokens) = 0;
+
+Locate and return next sentence of the given text. Returns ``true`` when successful and ``false`` when
+there are no more sentences in the given text. The arguments are filled with found tokens if not ``NULL``.
+The ``forms`` contain token ranges in bytes of UTF-8 encoding, the ``tokens`` contain token ranges
+in Unicode characters.
+
+=== tokenizer::new_vertical_tokenizer ===[tokenizer_new_vertical_tokenizer]
+``` static [tokenizer #tokenizer] new_vertical_tokenizer();
+
+Returns a new instance of a vertical tokenizer, which considers every line to
+be one token, with empty line denoting end of sentence. The user should delete
+the instance after use.
+
+=== tokenizer::new_czech_tokenizer ===[tokenizer_new_czech_tokenizer]
+``` static [tokenizer #tokenizer] new_czech_tokenizer();
+
+Returns a new instance of a Czech tokenizer. The user should delete it after
+use.
+
+If two [MorphoDiTa versions #versioning] have the same //major.minor//, this
+tokenizer should behave identically (apart from obvious bugfixes). Nevertheless,
+the behaviour of this tokenizer might change in different //major.minor// version.
+If you need a tokenizer whose behaviour does not change, use tokenizer embedded
+in a morphological dictionary.
+
+=== tokenizer::new_english_tokenizer ===[tokenizer_new_english_tokenizer]
+``` static [tokenizer #tokenizer] new_english_tokenizer();
+
+Returns a new instance of a English tokenizer. The user should delete it after
+use.
+
+If two [MorphoDiTa versions #versioning] have the same //major.minor//, this
+tokenizer should behave identically (apart from obvious bugfixes). Nevertheless,
+the behaviour of this tokenizer might change in different //major.minor// version.
+If you need a tokenizer whose behaviour does not change, use tokenizer embedded
+in a morphological dictionary.
+
+=== tokenizer::new_generic_tokenizer ===[tokenizer_new_generic_tokenizer]
+``` static [tokenizer #tokenizer] new_generic_tokenizer();
+
+Returns a new instance of a generic tokenizer. The user should delete it after
+use.
+
+If two [MorphoDiTa versions #versioning] have the same //major.minor//, this
+tokenizer should behave identically (apart from obvious bugfixes). Nevertheless,
+the behaviour of this tokenizer might change in different //major.minor// version.
+If you need a tokenizer whose behaviour does not change, use tokenizer embedded
+in a morphological dictionary.
+
+
+== Class derivator ==[derivator]
+```
+class derivator {
+ public:
+  virtual ~derivator();
+
+  virtual bool [parent #derivator_parent]([string_piece #string_piece] lemma, [derivated_lemma #derivated_lemma]& parent) const = 0;
+  virtual bool [children #derivator_children]([string_piece #string_piece] lemma, std::vector<[derivated_lemma #derivated_lemma]>& children) const = 0;
+};
+```
+
+The [``derivator`` #derivator] class perform morphological derivation on given lemmas.
+The derivation are computed using lemma ids, see [Lemma Structure #lemma_structure].
+
+The [``derivator`` #derivator] instances can be obtained through instances of
+[``morpho`` #morpho] (and transitively through [``tagger`` #tagger]).
+
+=== derivator::parent ===[derivator_parent]
+``` virtual bool parent([string_piece #string_piece] lemma, [derivated_lemma #derivated_lemma]& parent) const = 0;
+
+Return the parent of a given lemma in the morphological derivation tree.
+The lemma is assumed to be lemma id (see [Lemma Structure #lemma_structure]), so if it contains
+any lemma comments, they are ignored.
+
+The returned lemma is a full lemma (lemma id plus appropriate lemma comments).
+
+If no parent exists, the function empties the parent lemma and returns ``false``.
+
+=== derivator::children ===[derivator_children]
+``` virtual bool children([string_piece #string_piece] lemma, std::vector<[derivated_lemma #derivated_lemma]>& children) const = 0;
+
+Return children of a given lemma in the morphological derivation tree.
+The lemma is assumed to be lemma id (see [Lemma Structure #lemma_structure]), so if it contains
+any lemma comments, they are ignored.
+
+The returned lemmas are full lemmas (lemma ids plus appropriate lemma comments).
+
+If no children exist, the function empties the children vector and returns ``false``.
+
+
+== Class derivation_formatter ==[derivation_formatter]
+```
+class derivation_formatter {
+ public:
+  virtual ~derivation_formatter() {}
+
+  virtual void [format_derivation #derivation_formatter_format_derivation](std::string& lemma) const = 0;
+
+  static [derivation_formatter #derivation_formatter]* [new_none_derivation_formatter #derivation_formatter_new_none_derivation_formatter]();
+  static [derivation_formatter #derivation_formatter]* [new_root_derivation_formatter #derivation_formatter_new_root_derivation_formatter](const [derivator #derivator]* derinet);
+  static [derivation_formatter #derivation_formatter]* [new_path_derivation_formatter #derivation_formatter_new_path_derivation_formatter](const [derivator #derivator]* derinet);
+  static [derivation_formatter #derivation_formatter]* [new_tree_derivation_formatter #derivation_formatter_new_tree_derivation_formatter](const [derivator #derivator]* derinet);
+  static [derivation_formatter #derivation_formatter]* [new_derivation_formatter #derivation_formatter_new_derivation_formatter]([string_piece #string_piece] name, const [derivator #derivator]* derinet);
+};
+```
+
+The [``derivation_formatter`` #derivation_formatter] class performs required
+morphological derivation and formats the results using a single string field
+(i.e., directly in the lemma).
+
+=== derivation_formatter::format_derivation ===[derivation_formatter_format_derivation]
+``` virtual void format_derivation(std::string& lemma) const = 0;
+
+Perform the required morphological derivation and format the result back directly
+in the lemma.
+
+=== derivation_formatter::new_none_derivation_formatter ===[derivation_formatter_new_none_derivation_formatter]
+``` static [derivation_formatter #derivation_formatter]* new_none_derivation_formatter();
+
+Return a new [``derivation_formatter`` #derivation_formatter] instance which does nothing
+(i.e., it performs no derivation).
+
+=== derivation_formatter::new_root_derivation_formatter ===[derivation_formatter_new_root_derivation_formatter]
+``` static [derivation_formatter #derivation_formatter]* new_root_derivation_formatter(const [derivator #derivator]* derinet);
+
+Return a new [``derivation_formatter`` #derivation_formatter] instance which replaces
+a lemma by the corresponding root in the derivation tree.
+
+=== derivation_formatter::new_path_derivation_formatter ===[derivation_formatter_new_path_derivation_formatter]
+``` static [derivation_formatter #derivation_formatter]* new_path_derivation_formatter(const [derivator #derivator]* derinet);
+
+Return a new [``derivation_formatter`` #derivation_formatter] instance which replaces
+a lemma by a space separated path to the root in the morphological derivation tree (the original
+lemma is first, followed by its parent, with the root being the last one).
+
+=== derivation_formatter::new_tree_derivation_formatter ===[derivation_formatter_new_tree_derivation_formatter]
+``` static [derivation_formatter #derivation_formatter]* new_tree_derivation_formatter(const [derivator #derivator]* derinet);
+
+Return a new [``derivation_formatter`` #derivation_formatter] instance which appends
+to the lemma the whole morphological derivation tree which contains it.
+
+The tree is encoded in the following way: root node is the first, then the subtrees
+of the root children are encoded recursively (each after one space), followed by a final
+space (which denotes that the children are complete).
+
+=== derivation_formatter::new_derivation_formatter ===[derivation_formatter_new_derivation_formatter]
+``` static [derivation_formatter #derivation_formatter]* new_derivation_formatter([string_piece #string_piece] name, const [derivator #derivator]* derinet);
+
+Return one of the available [``derivation_formatter`` #derivation_formatter] instances
+according to the ``name`` parameter:
+- ``none``: return [new_none_derivation_formatter #derivation_formatter_new_none_derivation_formatter] instance
+- ``root``: return [new_root_derivation_formatter #derivation_formatter_new_root_derivation_formatter] instance
+- ``path``: return [new_path_derivation_formatter #derivation_formatter_new_path_derivation_formatter] instance
+- ``tree``: return [new_tree_derivation_formatter #derivation_formatter_new_tree_derivation_formatter] instance
+-
+
+
+== Class morpho ==[morpho]
+```
+class morpho {
+ public:
+  virtual ~morpho() {}
+
+  static [morpho #morpho]* [load #morpho_load_cstring](const char* fname);
+  static [morpho #morpho]* [load #morpho_load_istream](istream& is);
+
+  enum [guesser_mode #morpho_guesser_mode] { NO_GUESSER = 0, GUESSER = 1, GUESSER_UNSPECIFIED = -1 };
+
+  virtual int [analyze #morpho_analyze]([string_piece #string_piece] form, [guesser_mode #morpho_guesser_mode] guesser, std::vector<[tagged_lemma #tagged_lemma]>& lemmas) const = 0;
+  virtual int [generate #morpho_generate]([string_piece #string_piece] lemma, const char* tag_wildcard, [guesser_mode #morpho_guesser_mode] guesser, std::vector<[tagged_lemma_forms #tagged_lemma_forms]>& forms) const = 0;
+
+  virtual int [raw_lemma_len #morpho_raw_lemma_len]([string_piece #string_piece] lemma) const = 0;
+  virtual int [lemma_id_len #morpho_lemma_id_len]([string_piece #string_piece] lemma) const = 0;
+  virtual int [raw_form_len #morpho_raw_form_len]([string_piece #string_piece] form) const = 0;
+
+  virtual [tokenizer #tokenizer]* [new_tokenizer #morpho_new_tokenizer]() const = 0;
+
+  virtual const [derivator #derivator]* [get_derivator #morpho_get_derivator]() const;
+};
+```
+
+A [``morpho`` #morpho] instance represents a morphological dictionary. Such a dictionary allow
+morphological analysis, morphological generation provide information about lemma structure
+and provides a suitable tokenizer. All methods are thread-safe.
+
+=== morpho::load(const char*) ===[morpho_load_cstring]
+``` static [morpho #morpho]* load(const char* fname);
+
+Factory method constructor. Accepts C string with a file name of the model.
+Returns a pointer to an instance of [``morpho`` #morpho] which the user should delete
+after use.
+
+=== morpho::load(istream&) ===[morpho_load_istream]
+``` static [morpho #morpho]* load(istream& is);
+
+Factory method constructor. Accepts an input stream with the
+model. Returns a pointer to an instance of [``morpho`` #morpho] which the user should
+delete after use.
+
+=== morpho::guesser_mode ===[morpho_guesser_mode]
+``` enum [guesser_mode #morpho_guesser_mode] { NO_GUESSER = 0, GUESSER = 1, GUESSER_UNSPECIFIED = -1 };
+
+Guesser mode defines behavior in case of unknown words. When set to
+``GUESSER``, morpho tries to guess unknown words. When set to ``NO_GUESSER``,
+morpho does not guess unknown words.
+
+The ``GUESSER_UNSPECIFIED`` mode denotes a default behaviour, which:
+- for [``morpho`` #morpho] means ``NO_GUESSER``
+- for [``tagger`` #tagger] means the default specified during tagger training
+-
+
+=== morpho::analyze() ===[morpho_analyze]
+``` virtual int analyze([string_piece #string_piece] form, [guesser_mode #morpho_guesser_mode] guesser, std::vector<[tagged_lemma #tagged_lemma]>& lemmas) const = 0;
+
+Perform morphological analysis of a form. The guesser parameter specifies whether
+a guesser can be used if the form is not found in the dictionary. Output is
+assigned to the lemmas vector.
+
+If the form is found in the dictionary, analyses are assigned to lemmas
+and ``NO_GUESSER`` returned. If ``guesser == GUESSER`` and the form analyses are
+found using a guesser, they are assigned to lemmas and ``GUESSER`` is
+returned.  Otherwise ``-1`` is returned and lemmas are filled with one
+analysis containing given form as lemma and a tag for unknown word.
+
+=== morpho::generate() ===[morpho_generate]
+```
+virtual int generate([string_piece #string_piece] lemmma, const char* tag_wildcard, [guesser_mode #morpho_guesser_mode] guesser, std::vector<[tagged_lemma_forms #tagged_lemma_forms]>& forms) const = 0;
+```
+
+Perform morphological generation of a lemma. Optionally a tag_wildcard can be
+specified (or be ``NULL``) and if so, results are filtered using this wildcard.
+The guesser parameter speficies whether a guesser can be used if the lemma is
+not found in the dictionary. Output is assigned to the forms vector.
+
+Tag_wildcard can be either ``NULL`` or a wildcard applied to the results.
+A ``?`` in the wildcard matches any character, ``[bytes]`` matches any of the
+bytes and ``[^bytes]`` matches any byte different from the specified ones.
+A ``-`` has no special meaning inside the bytes and if ``]`` is first in bytes,
+it does not end the bytes group.
+
+If the given lemma is only a raw lemma, all lemma ids with this raw lemma are
+returned. Otherwise only matching lemma ids are returned, ignoring any lemma
+comments. For every found lemma, matching forms are filtered using the
+tag_wildcard. If at least one lemma is found in the dictionary, ``NO_GUESSER``
+is returned. If ``guesser == GUESSER`` and the lemma is found by the guesser,
+``GUESSER`` is returned. Otherwise, forms are cleared and ``-1`` is returned.
+
+=== morpho::raw_lemma_len ===[morpho_raw_lemma_len]
+``` virtual int raw_lemma_len([string_piece #string_piece] lemma) const = 0;
+
+When given a lemma returned by the dictionary, returns the length of
+a //raw lemma// (see [Lemma Structure #lemma_structure]).
+
+=== morpho::lemma_id_len ===[morpho_lemma_id_len]
+``` virtual int lemma_id_len([string_piece #string_piece] lemma) const = 0;
+
+When given a lemma returned by the dictionary, returns the length of
+a //raw lemma// plus a //lemma id// (see [Lemma Structure #lemma_structure]).
+Therefore, the substring of the original lemma of this length is a unique
+lemma identifier. The rest of the original lemma are lemma comments which
+do not identify the lemma.
+
+=== morpho::raw_form_len ===[morpho_raw_form_len]
+``` virtual int raw_form_len([string_piece #string_piece] form) const = 0;
+
+When given a form, returns the length of a //raw form//. This is used only in
+//external morphology model//, where form contains also morphological analyses,
+and this call can return the length of the form without the analyses.
+
+=== morpho::new_tokenizer ===[morpho_new_tokenizer]
+``` virtual [tokenizer #tokenizer]* new_tokenizer() const = 0;
+
+Returns a new instance of a suitable tokenizer or ``NULL`` if no such tokenizer
+exists. The user should delete it after use.
+
+Note that the tokenizer might use the [``morpho`` #morpho] instance, so the tokenizer
+must not be used after the [``morpho`` #morpho] instance is destructed.
+
+=== morpho::get_derivator ===[morpho_get_derivator]
+``` virtual const [derivator #derivator]* get_derivator() const;
+
+Returns a [``derivator`` #derivator] for the morphology, or ``NULL`` if not available.
+
+The [``derivator`` #derivator] is owned by the morphology, so the returned
+instance should not be freed and it cannot be used after the [``morpho`` #morpho] instance
+is destructed.
+
+== Class tagger ==[tagger]
+
+```
+class tagger {
+ public:
+  virtual ~tagger() {}
+
+  static [tagger #tagger]* [load #tagger_load_cstring](const char* fname);
+  static [tagger #tagger]* [load #tagger_load_istream](istream& is);
+
+  virtual const [morpho #morpho]* [get_morpho #tagger_get_morpho]() const = 0;
+
+  virtual void [tag #tagger_tag](const std::vector<[string_piece #string_piece]>& forms, std::vector<[tagged_lemma #tagged_lemma]>& tags, [morpho #morpho]::[guesser_mode #morpho_guesser_mode] guesser = -1) const = 0;
+
+  virtual void [tag_analyzed #tagger_tag_analyzed](const std::vector<[string_piece #string_piece]>& forms, std::vector<std::vector<[tagged_lemma #tagged_lemma]> >& analyses, std::vector<int>& tags) const = 0;
+
+  [tokenizer #tokenizer]* [new_tokenizer #tagger_new_tokenizer]() const = 0;
+};
+```
+
+A [``tagger`` #tagger] instance represents a tagger, which perform disambiguation of
+morphological analyses. All methods are thread-safe.
+
+=== tagger::load(const char*) ===[tagger_load_cstring]
+``` static [tagger #tagger]* load(const char* fname);
+
+Factory method constructor. Accepts C string with a file name of the model.
+Returns a pointer to an instance of [``tagger`` #tagger] which the user should delete
+after use.
+
+
+=== tagger::load(istream&) ===[tagger_load_istream]
+``` static [tagger #tagger]* load(istream& is);
+
+Factory method constructor. Accepts an input stream with the
+model. Returns a pointer to an instance of [``tagger`` #tagger] which the user should
+delete after use.
+
+=== tagger::get_morpho() ===[tagger_get_morpho]
+``` virtual const [morpho #morpho]* get_morpho() const = 0;
+
+Returns a pointer to an instance of [``morpho`` #morpho] associated with the tagger. Do
+not delete the pointer, it is owned by the tagger instance and deleted in the
+tagger destructor.
+
+=== tagger::tag() ===[tagger_tag]
+``` virtual void tag(const std::vector<[string_piece #string_piece]>& forms, std::vector<[tagged_lemma #tagged_lemma]>& tags, [morpho #morpho]::[guesser_mode #morpho_guesser_mode] guesser = -1) const = 0;
+
+Perform morphological analysis and subsequent disambiguation. Accepts
+a ``std::vector`` of [``string_piece`` #string_piece] and fills the output vector of [``tagged_lemma`` #tagged_lemma].
+
+The `guesser` parameter defines whether morphological guesser should be used.
+If negative value is specified (which is the default), the guesser settings
+employed when the tagger model was trained is used.
+
+=== tagger::tag_analyzed() ===[tagger_tag_analyzed]
+``` virtual void tag_analyzed(const std::vector<[string_piece #string_piece]>& forms, std::vector<std::vector<[tagged_lemma #tagged_lemma]> >& analyses, std::vector<int>& tags) const = 0;
+
+Perform morphological disambiguation using given morphological analyses.
+The indices of chosen analyses are stored in the output vector ``tags``.
+
+None of the ``analyses`` can be empty -- in that case, no operation is performed
+and ``tags`` is empty. On the other hand, the ``analyses`` vector can be larger
+than ``forms`` -- additional entries are ignored in that case.
+
+Note that the tagger was trained with a specific morphology -- the more your
+morphological analyses differ from the original ones, the worse the results
+will be. One of the usages of [``tag_analyzed`` #tagger_tag_analyzed] is to
+consider only a subset of morphological analyses.
+
+=== tagger::new_tokenizer ===[tagger_new_tokenizer]
+``` virtual [tokenizer #tokenizer]* new_tokenizer() const = 0;
+
+Returns a new instance of a suitable tokenizer or ``NULL`` if no such tokenizer
+exists. The user should delete it after use.  The call is equal to
+``[get_morpho() #tagger_get_morpho]->[new_tokenizer() #morpho_new_tokenizer]``.
+
+== Class tagset_converter ==[tagset_converter]
+
+```
+class tagset_converter {
+ public:
+  virtual ~tagset_converter() {}
+
+  virtual void [convert #tagset_converter_convert]([tagged_lemma #tagged_lemma]& tagged_lemma) const = 0;
+  virtual void [convert_analyzed #tagset_converter_convert_analyzed](std::vector<[tagged_lemma #tagged_lemma]>& tagged_lemmas) const = 0;
+  virtual void [convert_generated #tagset_converter_convert_generated](std::vector<[tagged_lemma_forms #tagged_lemma_forms]>& forms) const = 0;
+
+  static [tagset_converter #tagset_converter]* [new_identity_converter #tagset_converter_new_identity_converter]();
+  static [tagset_converter #tagset_converter]* [new_pdt_to_conll2009_converter #tagset_converter_new_pdt_to_conll2009_converter]();
+  static [tagset_converter #tagset_converter]* [new_strip_lemma_comment_converter #tagset_converter_new_strip_lemma_comment_converter](const [morpho #morpho]& dictionary);
+  static [tagset_converter #tagset_converter]* [new_strip_lemma_id_converter #tagset_converter_new_strip_lemma_id_converter](const [morpho #morpho]& dictionary);
+};
+```
+
+=== tagset_converter::convert() ===[tagset_converter_convert]
+``` virtual void convert([tagged_lemma #tagged_lemma]& tagged_lemma) const = 0;
+
+Convert the given tagged lemma.
+
+=== tagset_converter::convert_analyzed() ===[tagset_converter_convert_analyzed]
+``` virtual void convert_analyzed(std::vector<[tagged_lemma #tagged_lemma]>& tagged_lemmas) const = 0;
+
+Convert the given results of [morpho::analyze #morpho_analyze]. Apart from calling
+[convert #tagset_converter_convert], any repeated entries are removed.
+
+=== tagset_converter::convert_generated() ===[tagset_converter_convert_generated]
+``` virtual void convert_generated(std::vector<[tagged_lemma_forms #tagged_lemma_forms]>& forms) const = 0;
+
+Convert the given results of [morpho::generate #morpho_generate]. Apart from calling
+[convert #tagset_converter_convert], any repeated entries are removed.
+
+=== tagset_converter::new_identity_converter() ===[tagset_converter_new_identity_converter]
+``` static [tagset_converter #tagset_converter]* new_identity_converter();
+
+Returns a new instance of an identity converter. All convert methods of an
+identity converter do nothing. The user should delete the instance after use.
+
+=== tagset_converter::new_pdt_to_conll2009_converter() ===[tagset_converter_new_pdt_to_conll2009_converter]
+``` static [tagset_converter #tagset_converter]* new_pdt_to_conll2009_converter();
+
+Returns a new instance of a Czech PDT tag set to CoNLL2009 tag set converter.
+The user should delete the instance after use.
+
+CoNLL2009 tag set uses two columns for tags -- one is a POS and the other one
+are additional FEATs. Because we have only one tag field, we merge these fields
+together by using ``Pos=?|FEAT``, i.e., the POS is stored as a first FEAT.
+
+=== tagset_converter::new_strip_lemma_comment_converter() ===[tagset_converter_new_strip_lemma_comment_converter]
+``` static [tagset_converter #tagset_converter]* new_strip_lemma_comment_converter(const [morpho #morpho]& dictionary);
+
+Returns a new instance of a tag set converter stripping
+[lemma comment #lemma_structure] using the given [``morpho`` #morpho] instance,
+which must remain valid during existence of the tag set converter. The user
+should delete the tag set converter instance after use.
+
+=== tagset_converter::new_strip_lemma_id_converter() ===[tagset_converter_new_strip_lemma_id_converter]
+``` static [tagset_converter #tagset_converter]* new_strip_lemma_id_converter(const [morpho #morpho]& dictionary);
+
+Returns a new instance of a tag set converter stripping
+[lemma id #lemma_structure] using the given [``morpho`` #morpho] instance,
+which must remain valid during existence of the tag set converter. The user
+should delete the tag set converter instance after use.
+
+
+== C++ Bindings API ==[cpp_bindings_api]
+
+Bindings for other languages than C++ are created using SWIG from the C++
+bindings API, which is a slightly modified version of the native C++ API.
+Main changes are replacement of [``string_piece`` #string_piece] type by native
+strings and removal of methods using ``istream``. Here is the C++ bindings API
+declaration:
+
+%!include: morphodita_bindings_api.t2t
+
+== C# Bindings ==[csharp_bindings]
+
+%!include: morphodita_bindings_csharp_api.t2t
+
+== Java Bindings ==[java_bindings]
+
+%!include: morphodita_bindings_java_api.t2t
+
+== Perl Bindings ==[perl_bindings]
+
+%!include: morphodita_bindings_perl_api.t2t
+
+== Python Bindings ==[python_bindings]
+
+%!include: morphodita_bindings_python_api.t2t

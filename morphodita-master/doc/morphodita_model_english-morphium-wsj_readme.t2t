@@ -1,0 +1,6 @@
+English MorphoDiTa Models
+=========================
+
+%!include: morphodita_model_about.t2t
+
+%!include: morphodita_model_english-morphium-wsj.t2t

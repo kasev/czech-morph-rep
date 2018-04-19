@@ -1,0 +1,203 @@
+MorphoDiTa API Tutorial
+=======================
+
+The MorphoDiTa API is defined in header ``morphodita.h`` and resides in
+``ufal::morphodita`` namespace. The easiest way to use MorphoDita is therefore:
+
+```
+#include morphodita.h
+
+using namespace ufal::morphodita;
+```
+
+== Tagger API ==[tutorial_tagger_api]
+
+The main access to MorphoDiTa tagger is through class ``tagger``.  An example
+of this class usage can be found in program file ``run_tagger.cpp``. A typical
+tagger usage may look like this:
+
+```
+#include tagger/tagger.h;
+
+using namespace ufal::morphodita;
+
+//...
+
+// load model to memory and construct tagger
+tagger* my_tagger = tagger::load("path_to_model");
+
+if (!t) ...
+
+// create sample input
+vector<string> words;
+words.push_back("malý");
+words.push_back("pes");
+
+vector<string_piece> forms;
+for (auto& word : words)
+  forms.emplace_back(word)
+
+// intialize output and tag
+vector<tagged_lemma> tags;
+my_tagger->tag(forms, tags);
+
+// access the output
+for (auto& tag : tags)
+  printf("%s\t%s\n", tag.lemma.c_str(), tag.tag.c_str());
+
+delete my_tagger;
+```
+
+The tagger is constructed by an overloaded factory method with one argument.
+The constructor either accepts an input stream (``istream&``)
+with the model or a C string (``const char*``) with a file name of the model.
+The constructor loads the linguistic model to memory and returns the tagger
+pointer ready for tagging, returning ``NULL`` if unsuccessful. If an input
+stream is used, it is positioned right after the end of the
+model.
+
+The main tagging method is ``tagger::tag``:
+
+```
+void tag(const std::vector<string_piece>& forms, std::vector<tagged_lemma>& tags) const;
+```
+
+The input is a ``std::vector`` of ``string_piece`` which is a structure
+referencing a string using ``const char* str`` and ``size_t len``.
+
+The ``tagger::tag`` method returns the tagged output in it's second argument,
+``std::vector<tagged_lemma>``. The calling procedure must provide a result vector
+and the tagger assigns the output to this vector. Obviously, the indexes in the
+output vector correspond to indexes in input vector.  ``tagged_lemma`` has two
+public members: ``std::string lemma`` and ``std:string tag``, corresponding to
+predicted lemma and tag, respectively.
+
+== Morphological Dictionary API ==[tutorial_morpho_api]
+
+The main access to MorphoDiTa morphological dictionary is through class
+``morpho``. An example of this interface usage can be found in a program file
+``run_morpho.cpp``.
+
+=== Dictionary Construction ===[tutorial_morpho_construction]
+
+Similarly to the tagger, MorphoDiTa morphological dictionary is constructed by an
+overloaded factory method which accepts either an input stream (``istream&``)
+or a C string ``const char*`` with the file name of the dictionary.
+The factory method returns a pointer to morphological dictionary or ``NULL`` if
+unsuccessful.
+
+```
+#include morpho/morpho.h
+
+using namespace ufal::morphodita;
+
+//...
+
+// load dictionary to memory
+morpho* my_morpho = morpho::load("path_to_dictionary");
+
+//...
+
+delete(my_morpho);
+```
+
+Another way of obtaining a pointer to morphology dictionary is through an instance
+of ``tagger`` class -- every tagger has a morphology dictionary, which is available
+through the method
+
+```
+virtual const morpho* get_morpho() const = 0;
+```
+
+Please note that you should not delete this pointer as it is owned by the
+``tagger`` class instance.
+
+=== Morphological Analysis ===[tutorial_morpho_analysis]
+
+MorphoDiTa morphological dictionary offers two functionalities: It either
+//analyzes// the given word, that means it outputs all possible lemma-tag pairs
+candidates for the given form; or for a given lemma-tag pair, it //generates//
+a form or a whole list of possible forms.
+
+In the first case, one performs morphological analysis for a given word by
+calling a method ``morpho::analyze``:
+
+```
+int analyze(string_piece form, guesser_mode guesser, std::vector<tagged_lemma>& lemmas) const;
+```
+
+An example (assuming that morphological dictionary is already constructed, see
+previous example):
+
+```
+vector<tagged_lemma> lemmas;    // output
+
+my_morpho->analyze("pes", morpho::GUESSER, vector<tagged_lemma>& lemmas);
+
+for (auto& lemma: lemmas)
+  printf ("%s %s\n, lemma.lemma.c_str(), lemma.tag.c_str())
+```
+
+The input is a form to analyze, then a Guesser mode (whether to use some kind
+of guesser or strictly dictionary only, see question Guesser Mode in
+[Questions and Answers #faq]) and output ``std::vector<tagged_lemma>``.  The
+caller must provide an output vector ``std::vector<tagged_lemma>`` and the
+method ``morpho::analyze`` assigns the output to this vector.
+
+=== Generation ===[tutorial_morpho_generation]
+
+MorphoDiTa performs morphological generation from a given lemma:
+
+```
+int generate(string_piece lemma, const char* tag_wildcard, guesser_mode guesser,
+             std::vector<tagged_lemma_forms>& forms) const;
+```
+
+==== Tag Wildcard ====[tutorial_tag_wildcard]
+
+Optionally, a tag wildcard can be specified (or be ``NULL``) and if so, results
+are filtered using this wildcard. This method can be therefore used in more
+ways: One may wish to generate all possible forms and their tags from a given
+lemma. Then the ``tag_wildcard`` is set to ``NULL`` and the method generates
+all possible combinations. One may also need a generate a specific form and tag
+from a given lemma, then ``tag_wildcard`` is set to this tag value.
+
+Or even more, for example, in the Czech positional morphology tagging system
+([Hajič 2004 http://books.google.cz/books?id=sB63AAAACAAJ]),
+one may even wish to generate something like "all forms in fourth case",
+then ``tag_wildcard`` should be set to ``????4``.
+Please see Section "Czech Morphology" in User's Manual for more details about the Czech positional tagging system.
+The previous example applies to morphological annotation of
+[PDT http://ufal.mff.cuni.cz/pdt3.0], however, the tag wildcards can be used in any
+morphological tagging system.
+
+Most characters of a tag wildcard match corresponding characters of a tag, with the following exceptions:
+ - ``?`` matches any character of a tag.
+ - ``[chars]`` matches any of the characters listed. The dash ``-`` has no special meaning and if ``]``
+   is the first character in ``chars``, it is considered as one of the characters and does not end the group.
+ - ``[^chars]`` matches any of the characters //not// listed.
+
+
+==== Unknown Lemmas ====[tutorial_unknown_lemmas]
+
+When the lemma is unknown, MorphoDiTa's generation behavior is defined by Guesser mode (see also
+question Guesser Mode in Questions and Answers). If at least one lemma is found
+in the dictionary, ``NO_GUESSER`` is returned. If ``guesser == GUESSER`` and the lemma
+is found by the guesser, ``GUESSER`` is returned. Otherwise, forms are cleared and
+``-1`` is returned.
+
+
+== Questions and Answers ==[faq]
+
+: **What is a Guesser Mode?**
+  Morphological analysis may try to guess the lemma and tag of an uknown word.
+  This option is turned on by ``morpho::GUESSER`` and off by
+  ``morpho::NO_GUESSER``.
+
+: **Why `string_piece`` and not ``const char*`` or ``std::string``?**
+  We aim to make MorphoDiTa interface as effective as possible. Because the
+  input strings may be substrings of larger text or come from different than
+  C++ memory regions, we want to avoid the cost of ``\\0`` padding or
+  ``string`` conversion. Nevertheless, both ``const char*`` and
+  ``std::string`` can be used instead of a ``string_piece`` because of existing
+  implicit conversion rules.
